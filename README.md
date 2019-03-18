@@ -1,32 +1,23 @@
 # scylla-cli
 
-Terminal tool for managing and repairing Scylla Cluster.
-
+Python script for managing and repairing (in a smart way) Scylla Cluster.
+It repairs the primary range of a Scylla node in discrete steps using 
+[advanced repair techniques](https://www.datastax.com/dev/blog/advanced-repair-techniques).
 
 ## Prerequisites
 
 * Python3
 * SSH connection to every Scylla host in the cluster should be possible
-* Scylla REST API listens on :10000
+* Scylla REST API listens on every Scylla host on `localhost:10000`
 
 Following env variables could be set to make your life easier:
 ```
-export SCYLLA_HOST='10.210.92.46'
+export SCYLLA_HOST='10.210.92.46' # initial endpoint for obtaining cluster topology
 export SCYLLA_USERNAME='root' # ssh user on Scylla host
 export SCYLLA_PKEY='/home/USER/.ssh/id_rsa' # Defaults to ~/.ssh/id_rsa
 ```
 
 ## Installation
-
-```
-pipenv --three install scylla-cli
-```
-or
-```
-pipsi install scylla-cli
-```
-
-or
 
 ```
 pip3 install scylla-cli
