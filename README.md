@@ -6,7 +6,7 @@ It repairs the primary range of a Scylla node in discrete steps using
 
 ## Prerequisites
 
-* Python3
+* Python >=3.5
 * SSH connection to every Scylla host in the cluster should be possible
 * Scylla REST API listens on every Scylla host on `localhost:10000`
 
