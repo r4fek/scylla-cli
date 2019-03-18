@@ -12,9 +12,9 @@ with open('README.md', 'r') as f:
 setup(
     name='scylla-cli',
     version='.'.join(map(str, meta.__version__)),
-    description='Console client for managing and Scylla Cluster',
+    description='Python script for managing and repairing Scylla Cluster',
     long_description=README,
-    long_description_content_type="text/markdown",
+    long_description_content_type='text/markdown',
     keywords='scylla cluster repair cli manager database nosql cassandra',
     author=meta.__author__,
     author_email=meta.__contact__,
