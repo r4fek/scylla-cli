@@ -5,6 +5,7 @@ Terminal tool for managing and repairing Scylla Cluster.
 
 ## Prerequisites
 
+* Python3
 * SSH connection to every Scylla host in the cluster should be possible
 * Scylla REST API listens on :10000
 
