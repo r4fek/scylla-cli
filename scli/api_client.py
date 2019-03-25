@@ -1,5 +1,8 @@
 import requests
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 from furl import furl
+
 
 from .tunnel import SSHTunnelsContainer
 
@@ -11,6 +14,8 @@ class ApiClient:
         'Content-Type': 'application/json',
     }
     TIMEOUT = (5, 5)
+    TOTAL_RETRIES = 10
+    BACKOFF_FACTOR = 5
     PATHS = {
         'cluster_name': '/storage_service/cluster_name',
         'endpoints_live': '/gossiper/endpoint/live/',
@@ -40,6 +45,18 @@ class ApiClient:
     def stop(self):
         self._tunnels_container.stop()
 
+    def _get_session(self):
+        s = requests.Session()
+        retry = Retry(
+            total=self.TOTAL_RETRIES,
+            read=self.TOTAL_RETRIES,
+            connect=self.TOTAL_RETRIES,
+            backoff_factor=self.BACKOFF_FACTOR,
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        s.mount('http://', adapter)
+        return s
+
     def _request(self, req_type, path, data=None, host=None, json=True):
         headers = self.BASE_HEADERS
         if host is not None:
@@ -55,7 +72,7 @@ class ApiClient:
         req = requests.Request(req_type, url.url, data=data or {},
                                headers=headers)
         prepped = req.prepare()
-        resp = requests.Session().send(prepped, timeout=self.TIMEOUT)
+        resp = self._get_session().send(prepped, timeout=self.TIMEOUT)
         resp.raise_for_status()
 
         return resp.json() if json else resp.text
