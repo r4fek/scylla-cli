@@ -45,13 +45,13 @@ class ApiClient:
     def stop(self):
         self._tunnels_container.stop()
 
-    def _get_session(self):
-        s = requests.Session()
+    def retry_session(self, retries=None, backoff_factor=None, session=None):
+        s = session or requests.Session()
         retry = Retry(
-            total=self.TOTAL_RETRIES,
-            read=self.TOTAL_RETRIES,
-            connect=self.TOTAL_RETRIES,
-            backoff_factor=self.BACKOFF_FACTOR,
+            total=retries or self.TOTAL_RETRIES,
+            read=retries or self.TOTAL_RETRIES,
+            connect=retries or self.TOTAL_RETRIES,
+            backoff_factor=backoff_factor or self.BACKOFF_FACTOR,
         )
         adapter = HTTPAdapter(max_retries=retry)
         s.mount('http://', adapter)
@@ -72,7 +72,7 @@ class ApiClient:
         req = requests.Request(req_type, url.url, data=data or {},
                                headers=headers)
         prepped = req.prepare()
-        resp = self._get_session().send(prepped, timeout=self.TIMEOUT)
+        resp = self.retry_session().send(prepped, timeout=self.TIMEOUT)
         resp.raise_for_status()
 
         return resp.json() if json else resp.text

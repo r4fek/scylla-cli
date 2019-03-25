@@ -83,7 +83,7 @@ class Repair:
                 return False
 
     def _run_repair(self, endpoint, keyspace, table=None):
-        log.info('Repair {keyspace} {table}on {name}'.format(
+        log.info('Repair {keyspace} {table} on {name}'.format(
             keyspace=keyspace, table=table or '', name=endpoint.name
         ))
 
