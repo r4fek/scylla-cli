@@ -15,6 +15,25 @@ log = logging.getLogger('scli')
 click_log.basic_config(log)
 
 
+@click.group()
+@click.option('-h', '--host', envvar='SCYLLA_HOST')
+@click.option('--hosts', multiple=True, help='Hosts to repair')
+@click.option('-u', '--ssh_username', envvar='SCYLLA_USERNAME', default='',
+              help='SSH username on Scylla host')
+@click.option('-k', '--ssh_pkey', envvar='SCYLLA_PKEY',
+              default=os.path.expanduser('~/.ssh/id_rsa'),
+              help='SSH public key path')
+@click.option('-p', '--ssh_pass', is_flag=True,
+              help='Use this flag if your SSH key is protected by password')
+@click.option('-l', '--log_to', help='Where to store logs from the client')
+@click_log.simple_verbosity_option(log)
+@click.pass_context
+def cli(ctx, host, hosts, ssh_username, ssh_pkey, ssh_pass, log_to):
+    if ssh_username != "":
+        ctx.obj = init_ssh_tunnel(ctx, host, hosts, ssh_username, ssh_pkey, ssh_pass, log_to)
+        ctx.meta["host"] = "http://127.0.0.1:{}".format(ctx.obj.get_port())
+
+
 def _setup_logger(log_to):
     """
     :param log_to: `syslog` or path to log file
@@ -54,27 +73,9 @@ def init_ssh_tunnel(ctx, host, hosts, ssh_username, ssh_pkey, ssh_pass, log_to):
 
     ctx.call_on_close(lambda: tunnel.stop())
 
-    tunnel.init_tunnels(hosts)
+    tunnel.init_tunnels(hosts if len(hosts) > 0 else [host])
 
     return tunnel
-
-
-@click.group()
-@click.option('-h', '--host', envvar='SCYLLA_HOST')
-@click.option('--ssh/--no-ssh', default=True,
-              help='Enable the usage of ssh tunnel')
-@click.option('-u', '--ssh_username', envvar='SCYLLA_USERNAME', default='',
-              help='SSH username on Scylla host')
-@click.option('-k', '--ssh_pkey', envvar='SCYLLA_PKEY',
-              default=os.path.expanduser('~/.ssh/id_rsa'),
-              help='SSH public key path')
-@click.option('-p', '--ssh_pass', is_flag=True,
-              help='Use this flag if your SSH key is protected by password')
-@click.option('-l', '--log_to', help='Where to store logs from the client')
-@click_log.simple_verbosity_option(log)
-@click.pass_context
-def cli(ctx, host, ssh, ssh_username, ssh_pkey, ssh_pass, log_to):
-    pass
 
 
 @cli.command(short_help='Repair Scylla Cluster')
@@ -100,12 +101,8 @@ def repair(ctx, host, keyspace, table, hosts, exclude, dc, local, ssh_username, 
         click.echo('Either --host or SCYLLA_HOST env should be provided')
         raise click.Abort()
 
-    if ssh_username != "":
-        tunnel = init_ssh_tunnel(ctx, host, hosts, ssh_username, ssh_pkey, ssh_pass, log_to)
-        host = "http://127.0.0.1:{}".format(tunnel.get_port())
-
     _repair = Repair(
-        host,
+        ctx.meta["host"] if "host" in ctx.meta else host,
         keyspace=keyspace,
         table=table,
         hosts=hosts,
@@ -136,7 +133,7 @@ def status(ctx, host, ssh_username, ssh_pkey, ssh_pass, log_to):
         tunnel = init_ssh_tunnel(ctx, host, [host], ssh_username, ssh_pkey, ssh_pass, log_to)
         host = "http://127.0.0.1:{}".format(tunnel.get_port())
 
-    c = Cluster(host)
+    c = Cluster(ctx.meta["host"] if "host" in ctx.meta else host)
     c.status()
 
 
