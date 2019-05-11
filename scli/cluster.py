@@ -4,9 +4,9 @@ import logging
 import click
 from prettytable import PrettyTable
 
-from .parser import parse_application_state
-from .utils import humansize
-from .api_client import client
+from scli.parser import parse_application_state
+from scli.utils import humansize
+from scli.api_client import ApiClient
 
 log = logging.getLogger('scli')
 
@@ -34,15 +34,16 @@ class Keyspace:
 
 
 class Ring:
-    def __init__(self, keyspace):
+    def __init__(self, endpoint, keyspace):
         self.keyspace = keyspace
         self.ranges = defaultdict(list)
+        self.client = ApiClient(endpoint)
         self._initialize_ring()
 
     def _initialize_ring(self):
         log.debug('Initializing ring for keyspace {}'.format(self.keyspace))
 
-        for token_range in client.describe_ring(self.keyspace):
+        for token_range in self.client.describe_ring(self.keyspace):
             for endpoint in token_range['endpoint_details']:
                 self.ranges[endpoint['host']].append(
                     (token_range['start_token'], token_range['end_token'])
@@ -52,27 +53,28 @@ class Ring:
         return self.ranges.get(endpoint, [])
 
 
-class Cluster:
+class Cluster(object):
     name = None
     endpoints = {}
     keyspaces = {}
 
-    def __init__(self):
-        self.name = client.cluster_name()
+    def __init__(self, endpoint):
+        self.client = ApiClient(endpoint)
+        self.name = self.client.cluster_name()
         self.initialize_endpoints()
         self.initialize_keyspaces()
 
     def initialize_keyspaces(self):
         keyspace_tables = defaultdict(set)
 
-        for table_data in client.tables():
+        for table_data in self.client.tables():
             keyspace_tables[table_data['ks']].add(table_data['cf'])
 
         for keyspace, tables in keyspace_tables.items():
             self.keyspaces[keyspace] = Keyspace(keyspace, tables)
 
     def initialize_endpoints(self):
-        endpoints = client.endpoints_detailed()
+        endpoints = self.client.endpoints_detailed()
         for data in endpoints:
             self.endpoints[data['addrs']] = Endpoint(
                 data['addrs'],
