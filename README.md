@@ -7,14 +7,15 @@ It repairs the primary range of a Scylla node in discrete steps using
 ## Prerequisites
 
 * Python >=3.5
-* SSH connection to every Scylla host in the cluster should be possible
-* Scylla REST API listens on every Scylla host on `localhost:10000`
+* SSH connection or direct access to every Scylla host in the cluster should be possible
+* Scylla REST API listens on every Scylla host on `<localhost|IP>:10000`
 
 Following env variables could be set to make your life easier:
 ```
 export SCYLLA_HOST='10.210.92.46' # initial endpoint for obtaining cluster topology
 export SCYLLA_USERNAME='root' # ssh user on Scylla host
 export SCYLLA_PKEY='/home/USER/.ssh/id_rsa' # Defaults to ~/.ssh/id_rsa
+export SCYLLA_CONNECTION_METHOD='ssh' # or 'direct'
 ```
 
 ## Installation

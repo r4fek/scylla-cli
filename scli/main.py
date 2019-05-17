@@ -6,9 +6,9 @@ import click
 import click_log
 
 import scli as meta
+from scli.api_client import ApiClient
 from .cluster import Cluster
 from .repair import Repair
-from .api_client import client
 
 
 click_log.ColorFormatter.colors['info'] = dict(fg="green")
@@ -39,7 +39,11 @@ def _setup_logger(log_to):
 
 
 @click.group()
-@click.option('-h', '--host', envvar='SCYLLA_HOST')
+@click.option('-h', '--host', envvar='SCYLLA_HOST',
+              help='Scylla host to connect to (an entrypoint)')
+@click.option('-m', '--method', envvar='SCYLLA_CONNECTION_METHOD',
+              default='ssh', type=click.Choice(['ssh', 'direct']),
+              help='Connection method: ssh or direct')
 @click.option('-u', '--ssh_username', envvar='SCYLLA_USERNAME', default='scli',
               help='SSH username on Scylla host')
 @click.option('-k', '--ssh_pkey', envvar='SCYLLA_PKEY',
@@ -50,30 +54,36 @@ def _setup_logger(log_to):
 @click.option('-l', '--log_to', help='Where to store logs from the client')
 @click_log.simple_verbosity_option(log)
 @click.pass_context
-def cli(ctx, host, ssh_username, ssh_pkey, ssh_pass, log_to):
+def cli(ctx, host, method, ssh_username, ssh_pkey, ssh_pass, log_to):
     if host is None:
         click.echo('Either --host or SCYLLA_HOST env should be provided')
         raise click.Abort()
 
     _setup_logger(log_to)
 
-    if ssh_pass:
-        password = click.prompt('Please enter a valid SSH key password',
-                                hide_input=True)
+    if method == 'ssh':
+        client = ApiClient(uses_ssh=True)
+        if ssh_pass:
+            password = click.prompt('Please enter a valid SSH key password',
+                                    hide_input=True)
+        else:
+            password = None
+
+        client.setup_ssh(
+            ssh_username=ssh_username,
+            ssh_pkey=ssh_pkey,
+            ssh_pass=password,
+            initial_endpoint=host,
+        )
+
+        def destroy_ssh_tunnels():
+            client.stop_ssh()
+
+        ctx.call_on_close(destroy_ssh_tunnels)
     else:
-        password = None
+        client = ApiClient(uses_ssh=False, initial_endpoint=host)
 
-    client.setup(
-        ssh_username=ssh_username,
-        ssh_pkey=ssh_pkey,
-        ssh_pass=password,
-        initial_endpoint=host,
-    )
-
-    def destroy_ssh_tunnels():
-        client.stop()
-
-    ctx.call_on_close(destroy_ssh_tunnels)
+    ctx.obj = client
 
 
 @cli.command(short_help='Repair Scylla Cluster')
@@ -84,8 +94,10 @@ def cli(ctx, host, ssh_username, ssh_pkey, ssh_pass, log_to):
 @click.option('--dc', help='Datacenter to repair')
 @click.option('--local', is_flag=True, help='Repair using hosts in local DC '
                                             'only')
-def repair(keyspace, table, hosts, exclude, dc, local):
+@click.pass_obj
+def repair(client, keyspace, table, hosts, exclude, dc, local):
     _repair = Repair(
+        client=client,
         keyspace=keyspace,
         table=table,
         hosts=hosts,
@@ -97,8 +109,9 @@ def repair(keyspace, table, hosts, exclude, dc, local):
 
 
 @cli.command(short_help='Show cluster status')
-def status():
-    c = Cluster()
+@click.pass_obj
+def status(client):
+    c = Cluster(client)
     c.status()
 
 

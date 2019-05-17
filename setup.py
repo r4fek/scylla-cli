@@ -5,14 +5,16 @@ import scli as meta
 
 
 with open('README.md', 'r') as f:
-    README = f.read()
+    readme = f.read()
 
+with open('requirements.txt', 'r') as f:
+    requirements = f.read().splitlines()
 
 setup(
     name='scylla-cli',
     version='.'.join(map(str, meta.__version__)),
     description='Python script for managing and repairing Scylla Cluster',
-    long_description=README,
+    long_description=readme,
     long_description_content_type='text/markdown',
     keywords='scylla cluster repair cli manager database nosql cassandra',
     author=meta.__author__,
@@ -22,15 +24,7 @@ setup(
     url=meta.__homepage__,
     packages=find_packages(exclude=('tests',)),
     include_package_data=True,
-    install_requires=[
-        'furl>=2.0,<2.1',
-        'click==7.0',
-        'click-log==0.3.2',
-        'prettytable',
-        'progress==1.5',
-        'requests<2.22',
-        'sshtunnel==0.1.4',
-    ],
+    install_requires=requirements,
     entry_points={
         'console_scripts': [
             'scli=scli.main:cli',

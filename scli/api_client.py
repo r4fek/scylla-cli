@@ -7,72 +7,107 @@ from furl import furl
 from .tunnel import SSHTunnelsContainer
 
 
-class ApiClient:
-    BASE_URL = 'http://localhost:{port}'
-    BASE_HEADERS = {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-    }
-    TIMEOUT = (5, 5)
-    TOTAL_RETRIES = 10
-    BACKOFF_FACTOR = 5
-    PATHS = {
-        'cluster_name': '/storage_service/cluster_name',
-        'endpoints_live': '/gossiper/endpoint/live/',
-        'endpoints_down': '/gossiper/endpoint/down/',
-        'endpoints': '/failure_detector/endpoints/',
-        'endpoints_simple': '/failure_detector/simple_states',
-        'tokens': '/storage_service/tokens/{endpoint}',
-        'datacenter': '/snitch/datacenter',
-        'describe_ring': '/storage_service/describe_ring/{keyspace}',
-        'column_family': '/column_family/',
-        'repair_async': '/storage_service/repair_async/{keyspace}',
-        'active_repair': '/storage_service/active_repair/',
-    }
+PATHS = {
+    'cluster_name': '/storage_service/cluster_name',
+    'endpoints_live': '/gossiper/endpoint/live/',
+    'endpoints_down': '/gossiper/endpoint/down/',
+    'endpoints': '/failure_detector/endpoints/',
+    'endpoints_simple': '/failure_detector/simple_states',
+    'tokens': '/storage_service/tokens/{endpoint}',
+    'datacenter': '/snitch/datacenter',
+    'describe_ring': '/storage_service/describe_ring/{keyspace}',
+    'column_family': '/column_family/',
+    'repair_async': '/storage_service/repair_async/{keyspace}',
+    'active_repair': '/storage_service/active_repair/',
+}
 
-    def __init__(self):
+
+class ApiClient:
+    def __init__(self, uses_ssh=True, initial_endpoint=None, port=10000,
+                 timeout=(5, 5), total_retries=10, backoff_factor=5):
+
+        self.initial_endpoint = initial_endpoint
+        self.port = port
+        self.timeout = timeout
+        self.total_retries = total_retries
+        self.backoff_factor = backoff_factor
+
         self._hosts = []
+        self.base_headers = {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+        }
+        self.base_url_tpl = 'http://{host}:{port}'
+
+        self.uses_ssh = uses_ssh
         self._tunnels_container = None
 
-    def setup(self, initial_endpoint=None, ssh_username=None, ssh_pkey=None,
-              ssh_pass=None):
+    def setup_ssh(self, initial_endpoint=None, ssh_username=None,
+                  ssh_pkey=None, ssh_pass=None):
+
+        self.uses_ssh = True
         self._tunnels_container = SSHTunnelsContainer(
             ssh_username=ssh_username,
             ssh_pkey=ssh_pkey,
             ssh_pass=ssh_pass,
             initial_endpoint=initial_endpoint)
 
-    def stop(self):
+    def stop_ssh(self):
+        if not self.uses_ssh:
+            return
+
         self._tunnels_container.stop()
 
     def retry_session(self, retries=None, backoff_factor=None, session=None):
         s = session or requests.Session()
         retry = Retry(
-            total=retries or self.TOTAL_RETRIES,
-            read=retries or self.TOTAL_RETRIES,
-            connect=retries or self.TOTAL_RETRIES,
-            backoff_factor=backoff_factor or self.BACKOFF_FACTOR,
+            total=retries or self.total_retries,
+            read=retries or self.total_retries,
+            connect=retries or self.total_retries,
+            backoff_factor=backoff_factor or self.backoff_factor,
         )
         adapter = HTTPAdapter(max_retries=retry)
         s.mount('http://', adapter)
         return s
 
+    def _get_base_url(self, host):
+        if self.uses_ssh:
+            _host = 'localhost'
+            _port = self._tunnels_container.get_port(host=host)
+
+        else:
+            _host = host or self.initial_endpoint
+            _port = self.port
+
+        return self.base_url_tpl.format(host=_host, port=_port)
+
     def _request(self, req_type, path, data=None, host=None, json=True):
-        headers = self.BASE_HEADERS
+        headers = self.base_headers
         if host is not None:
             assert host in self._hosts, '{} is not part of the cluster!'\
                 .format(host)
             headers.update({'Host': host})
 
-        port = self._tunnels_container.get_port(host=host)
-        base_url = self.BASE_URL.format(port=port)
+        base_url = self._get_base_url(host)
         url = furl(base_url + path)
         url.add(data or {})
 
         req = requests.Request(req_type, url.url, data=data or {},
                                headers=headers)
         prepped = req.prepare()
-        resp = self.retry_session().send(prepped, timeout=self.TIMEOUT)
+
+        s = requests.Session()
+        retry = Retry(
+            total=self.total_retries,
+            read=self.total_retries,
+            connect=self.total_retries,
+            backoff_factor=self.backoff_factor,
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        s.mount('http://', adapter)
+        settings = s.merge_environment_settings(prepped.url, {}, None, None,
+                                                None)
+        resp = s.send(prepped, timeout=self.timeout, **settings)
         resp.raise_for_status()
 
         return resp.json() if json else resp.text
@@ -84,7 +119,7 @@ class ApiClient:
         return self._request('POST', path, data=data, host=host, json=json)
 
     def cluster_name(self):
-        return self._get(self.PATHS['cluster_name'])
+        return self._get(PATHS['cluster_name'])
 
     def endpoints_detailed(self):
         """
@@ -101,7 +136,7 @@ class ApiClient:
           ...
         ]
         """
-        endpoints = self._get(self.PATHS['endpoints'])
+        endpoints = self._get(PATHS['endpoints'])
         self._hosts = [e['addrs'] for e in endpoints]
 
         return endpoints
@@ -115,22 +150,22 @@ class ApiClient:
           }
         ]
         """
-        endpoints = self._get(self.PATHS['endpoints_simple'])
+        endpoints = self._get(PATHS['endpoints_simple'])
         self._hosts = [e['key'] for e in endpoints]
 
         return endpoints
 
     def tokens(self, endpoint):
-        return self._get(self.PATHS['tokens'].format(endpoint=endpoint))
+        return self._get(PATHS['tokens'].format(endpoint=endpoint))
 
     def datacenter(self, endpoint):
-        return self._get(self.PATHS['datacenter'], data={'host': endpoint})
+        return self._get(PATHS['datacenter'], data={'host': endpoint})
 
     def describe_ring(self, keyspace):
-        return self._get(self.PATHS['describe_ring'].format(keyspace=keyspace))
+        return self._get(PATHS['describe_ring'].format(keyspace=keyspace))
 
     def tables(self):
-        return self._get(self.PATHS['column_family'])
+        return self._get(PATHS['column_family'])
 
     def repair_async(self, host, keyspace, table, start_token=None,
                      end_token=None, dc=None):
@@ -145,16 +180,12 @@ class ApiClient:
             'dataCenters': dc,
             'trace': "'true'"
         }
-        return self._post(self.PATHS['repair_async'].format(keyspace=keyspace),
+        return self._post(PATHS['repair_async'].format(keyspace=keyspace),
                           data=data, host=host, json=False)
 
     def repair_status(self, host, keyspace, repair_id):
-        return self._get(self.PATHS['repair_async'].format(keyspace=keyspace),
+        return self._get(PATHS['repair_async'].format(keyspace=keyspace),
                          data={'id': repair_id}, host=host, json=False)
 
     def active_repair(self, host):
-        return self._get(self.PATHS['active_repair'], host=host)
-
-
-client = ApiClient()
-__all__ = ['client']
+        return self._get(PATHS['active_repair'], host=host)

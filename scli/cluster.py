@@ -6,7 +6,6 @@ from prettytable import PrettyTable
 
 from .parser import parse_application_state
 from .utils import humansize
-from .api_client import client
 
 log = logging.getLogger('scli')
 
@@ -34,7 +33,8 @@ class Keyspace:
 
 
 class Ring:
-    def __init__(self, keyspace):
+    def __init__(self, client, keyspace):
+        self.client = client
         self.keyspace = keyspace
         self.ranges = defaultdict(list)
         self._initialize_ring()
@@ -42,7 +42,7 @@ class Ring:
     def _initialize_ring(self):
         log.debug('Initializing ring for keyspace {}'.format(self.keyspace))
 
-        for token_range in client.describe_ring(self.keyspace):
+        for token_range in self.client.describe_ring(self.keyspace):
             for endpoint in token_range['endpoint_details']:
                 self.ranges[endpoint['host']].append(
                     (token_range['start_token'], token_range['end_token'])
@@ -57,22 +57,23 @@ class Cluster:
     endpoints = {}
     keyspaces = {}
 
-    def __init__(self):
-        self.name = client.cluster_name()
+    def __init__(self, client):
+        self.client = client
+        self.name = self.client.cluster_name()
         self.initialize_endpoints()
         self.initialize_keyspaces()
 
     def initialize_keyspaces(self):
         keyspace_tables = defaultdict(set)
 
-        for table_data in client.tables():
+        for table_data in self.client.tables():
             keyspace_tables[table_data['ks']].add(table_data['cf'])
 
         for keyspace, tables in keyspace_tables.items():
             self.keyspaces[keyspace] = Keyspace(keyspace, tables)
 
     def initialize_endpoints(self):
-        endpoints = client.endpoints_detailed()
+        endpoints = self.client.endpoints_detailed()
         for data in endpoints:
             self.endpoints[data['addrs']] = Endpoint(
                 data['addrs'],
