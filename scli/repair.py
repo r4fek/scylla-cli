@@ -4,8 +4,8 @@ import logging
 
 from progress.bar import Bar
 
-from scli.cluster import Cluster, Ring
-from scli.api_client import ApiClient
+from .cluster import Cluster, Ring
+from .api_client import client
 
 
 log = logging.getLogger('scli')
@@ -22,18 +22,15 @@ class ProgressBar(Bar):
 class Repair:
     MAX_FAILURES = 20
 
-    def __init__(self, endpoint, keyspace=None, table=None, dc=None,
+    def __init__(self, keyspace=None, table=None, dc=None,
                  hosts=None, exclude=None, local=None):
-        self.endpoint = endpoint
-        self.cluster = Cluster(endpoint)
+        self.cluster = Cluster()
         self.ring = None
         self.table = table
         self.dc = dc
         self.failures = 0
         self.failed_ranges = []
         self.local = local
-        self.client = ApiClient(endpoint)
-
         if keyspace is None:
             self.keyspaces = self.cluster.keyspaces.keys()
         else:
@@ -63,7 +60,7 @@ class Repair:
         repair_start = datetime.now()
 
         for keyspace in self.keyspaces:
-            self.ring = Ring(self.endpoint, keyspace)
+            self.ring = Ring(keyspace)
             for endpoint in self.endpoints:
                 self._repair_endpoint(endpoint, keyspace, table=self.table)
 
@@ -73,7 +70,7 @@ class Repair:
     def _check_repair_status(self, endpoint_name, keyspace, rid):
         while True:
             sleep(1)
-            status = self.client.repair_status(
+            status = client.repair_status(
                 endpoint_name, keyspace, rid)
             if status == '"FAILED"':
                 return False
@@ -116,7 +113,7 @@ class Repair:
         bar.finish()
 
     def _repair_range(self, endpoint, keyspace, start, end, table=None):
-        repair_id = self.client.repair_async(
+        repair_id = client.repair_async(
             endpoint.name,
             keyspace,
             table=table,
@@ -140,7 +137,7 @@ class Repair:
         return ok
 
     def _repair_endpoint(self, endpoint, keyspace, table=None):
-        active_repair = self.client.active_repair(endpoint.name)
+        active_repair = client.active_repair(endpoint.name)
         if len(active_repair) > 0:
             log.warning('Node {name} is already involved in repair {repair}'
                         .format(name=endpoint.name, repair=active_repair))
