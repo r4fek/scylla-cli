@@ -1,21 +1,13 @@
+import sys
 from time import sleep
-from datetime import timedelta, datetime
+from datetime import datetime
 import logging
 
-from progress.bar import Bar
-
+from tqdm import tqdm
 from .cluster import Cluster, Ring
 
 
 log = logging.getLogger('scli')
-
-
-class ProgressBar(Bar):
-    suffix = '%(index)d/%(max)d took %(elapsed_human)s / %(eta_td)s remaining'
-
-    @property
-    def elapsed_human(self):
-        return str(timedelta(seconds=self.elapsed))
 
 
 class Repair:
@@ -88,8 +80,7 @@ class Repair:
         ))
 
         token_ranges = self.ring.ranges_for_endpoint(endpoint.name)
-        bar = ProgressBar('Progress', max=len(token_ranges))
-        bar.next(0)
+        bar = tqdm(token_ranges)
 
         for start, end in token_ranges:
             if not self._repair_range(
@@ -102,15 +93,13 @@ class Repair:
                         self._repair_range(
                             endpoint.name, keyspace, start, end, table=_table)
 
-            bar.next()
-            if not bar.is_tty():
+            bar.update()
+            if not sys.stdout.isatty():
                 log.info('{index}/{max} complete'.format(
-                    index=bar.index, max=bar.max))
+                    index=bar.n, max=bar.total))
 
             if self.failures >= self.MAX_FAILURES:
                 raise Exception('Max number of failures exceeded')
-
-        bar.finish()
 
     def _repair_range(self, endpoint, keyspace, start, end, table=None):
         repair_id = self.client.repair_async(

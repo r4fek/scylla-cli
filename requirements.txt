@@ -2,7 +2,7 @@ furl>=2.0,<2.1
 click==7.0
 click-log==0.3.2
 prettytable
-progress==1.5
 pysocks==1.6.8
 requests[socks]<2.22
 sshtunnel==0.1.4
+tqdm==4.32.1
