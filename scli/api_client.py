@@ -58,18 +58,6 @@ class ApiClient:
 
         self._tunnels_container.stop()
 
-    def retry_session(self, retries=None, backoff_factor=None, session=None):
-        s = session or requests.Session()
-        retry = Retry(
-            total=retries or self.total_retries,
-            read=retries or self.total_retries,
-            connect=retries or self.total_retries,
-            backoff_factor=backoff_factor or self.backoff_factor,
-        )
-        adapter = HTTPAdapter(max_retries=retry)
-        s.mount('http://', adapter)
-        return s
-
     def _get_base_url(self, host):
         if self.uses_ssh:
             _host = 'localhost'
