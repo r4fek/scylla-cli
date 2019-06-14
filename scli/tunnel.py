@@ -51,6 +51,15 @@ class SSHTunnelsContainer:
         self._tunnels[host].check_tunnels()
         return self._tunnels[host].local_bind_port
 
+    def reset(self):
+        """
+        Reestablish SSH tunnels due to connection error
+        """
+        self.stop()
+        discovered_endpoints = list(self._tunnels.keys())
+        self._tunnels = {}
+        self.init_tunnels(discovered_endpoints)
+
     def stop(self):
         for server in self._tunnels.values():
             server.stop()

@@ -1,4 +1,7 @@
+import logging
+
 import requests
+from requests import exceptions
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 from furl import furl
@@ -7,6 +10,7 @@ from furl import furl
 from .tunnel import SSHTunnelsContainer
 
 
+log = logging.getLogger('scli')
 PATHS = {
     'cluster_name': '/storage_service/cluster_name',
     'endpoints_live': '/gossiper/endpoint/live/',
@@ -69,18 +73,8 @@ class ApiClient:
 
         return self.base_url_tpl.format(host=_host, port=_port)
 
-    def _request(self, req_type, path, data=None, host=None, json=True):
-        headers = self.base_headers
-        if host is not None:
-            assert host in self._hosts, '{} is not part of the cluster!'\
-                .format(host)
-            headers.update({'Host': host})
-
-        base_url = self._get_base_url(host)
-        url = furl(base_url + path)
-        url.add(data or {})
-
-        req = requests.Request(req_type, url.url, data=data or {},
+    def _send_request(self, req_type, url, data=None, headers=None, attempt=1):
+        req = requests.Request(req_type, url, data=data or {},
                                headers=headers)
         prepped = req.prepare()
 
@@ -95,9 +89,33 @@ class ApiClient:
         s.mount('http://', adapter)
         settings = s.merge_environment_settings(prepped.url, {}, None, None,
                                                 None)
-        resp = s.send(prepped, timeout=self.timeout, **settings)
-        resp.raise_for_status()
+        try:
+            resp = s.send(prepped, timeout=self.timeout, **settings)
+            resp.raise_for_status()
+            return resp
+        except exceptions.RequestException as e:
+            log.error(str(e))
+            if attempt > self.total_retries:
+                raise e
 
+            if self.uses_ssh and isinstance(e, exceptions.ConnectionError):
+                self._tunnels_container.reset()
+            return self._send_request(
+                req_type, url, data=data, headers=headers, attempt=attempt+1)
+
+    def _request(self, req_type, path, data=None, host=None, json=True):
+        headers = self.base_headers
+        if host is not None:
+            assert host in self._hosts, '{} is not part of the cluster!'\
+                .format(host)
+            headers.update({'Host': host})
+
+        base_url = self._get_base_url(host)
+        url = furl(base_url + path)
+        url.add(data or {})
+
+        resp = self._send_request(
+            req_type, url.url, data=data or {}, headers=headers)
         return resp.json() if json else resp.text
 
     def _get(self, path, data=None, host=None, json=True):
