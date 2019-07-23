@@ -123,6 +123,8 @@ class Repair:
                     table=table,
                     endpoint_name=endpoint.name)
             )
+        if ok:
+            self.failures = 0
         return ok
 
     def _repair_endpoint(self, endpoint, keyspace, table=None):

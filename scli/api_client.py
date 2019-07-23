@@ -98,7 +98,8 @@ class ApiClient:
             if attempt > self.total_retries:
                 raise e
 
-            if self.uses_ssh and isinstance(e, exceptions.ConnectionError):
+            if self.uses_ssh and issubclass(
+                    e.__class__, exceptions.ConnectionError):
                 self._tunnels_container.reset()
             return self._send_request(
                 req_type, url, data=data, headers=headers, attempt=attempt+1)
