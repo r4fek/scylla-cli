@@ -91,7 +91,7 @@ class Repair:
                     # try to repair tables one by one if above fails
                     for _table in self.to_repair:
                         self._repair_range(
-                            endpoint.name, keyspace, start, end, table=_table)
+                            endpoint, keyspace, start, end, table=_table)
 
             bar.update()
             if not sys.stdout.isatty():
