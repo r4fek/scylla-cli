@@ -1,4 +1,4 @@
-__version__ = (0, 1, 9)
+__version__ = (0, 1, 10)
 __author__ = "Rafal Furmanski"
 __contact__ = "r.furmanski@gmail.com"
 __homepage__ = "http://github.com/r4fek/scylla-cli"
