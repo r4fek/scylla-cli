@@ -23,6 +23,7 @@ class SSHTunnelsContainer:
             ssh_pkey=self._ssh_pkey,
             ssh_private_key_password=self._ssh_pass or 'fake',
             remote_bind_address=('127.0.0.1', 10000),
+            set_keepalive=10,
         )
         try:
             server.start()
